@@ -1,9 +1,11 @@
 const stops={
- roros:{title:'Røros',text:'Charmig start med världsarvskänsla, träbebyggelse, mat och en mjuk första etapp från Idre.',bullets:['Perfekt första övernattning','Kvällspromenad i centrum','Bra för att samla gruppen innan fjällen'],map:'Røros Norway'},
- jotunheimen:{title:'Jotunheimen',text:'Resans fjällhjärta. Här väljer ni Besseggen eller Galdhøpiggen beroende på väder, ork och ambitionsnivå.',bullets:['Besseggen = ikonisk kamvandring','Galdhøpiggen = Norges högsta berg','Boka/planera tidigt vid fint väder'],map:'Jotunheimen Norway'},
- stryn:{title:'Stryn',text:'Strategisk bas för fjord, dalar, glaciärkänsla och aktiv dag utan att behöva köra långt.',bullets:['Bra övernattningsläge','Nära Loen och Olden','Möjlighet till cykel och korta utflykter'],map:'Stryn Norway'},
- geiranger:{title:'Geiranger',text:'Fjordresans stora wow-stopp. Här ska ni prioritera båt/RIB och utsiktsplatser.',bullets:['Fjordkryssning eller RIB','Flydalsjuvet','Middag med fjordutsikt'],map:'Geiranger Norway'},
- trollstigen:{title:'Trollstigen',text:'Ikonisk vägdag med utsiktsplattformar, hårnålskurvor och dramatiska berg.',bullets:['Kolla vägläge innan avfärd','Åk tidigt för mindre trafik','Avsluta i Åndalsnes'],map:'Trollstigen Norway'}
+ idre:{title:'Idre',text:'Start och mål. Perfekt utgångspunkt för att rulla in i Norge utan en brutal första dag.',bullets:['Samla gruppen och packa bilen','Ladda ner offline-kartor','Starta med marginal'],map:'Idre Sweden',lat:61.8587,lon:12.7144,img:'roadbook_montage.png'},
+ roros:{title:'Røros',text:'Charmig start med världsarvskänsla, träbebyggelse, mat och en mjuk första etapp från Idre.',bullets:['Perfekt första övernattning','Kvällspromenad i centrum','Bra för att samla gruppen innan fjällen'],map:'Røros Norway',lat:62.5747,lon:11.3842,img:'roros_wide.jpg'},
+ jotunheimen:{title:'Jotunheimen',text:'Resans fjällhjärta. Här väljer ni Besseggen eller Galdhøpiggen beroende på väder, ork och ambitionsnivå.',bullets:['Besseggen = ikonisk kamvandring','Galdhøpiggen = Norges högsta berg','Boka/planera tidigt vid fint väder'],map:'Jotunheimen Norway',lat:61.5000,lon:8.7500,img:'besseggen_wide.jpg'},
+ stryn:{title:'Stryn',text:'Strategisk bas för fjord, dalar, glaciärkänsla och aktiv dag utan att behöva köra långt.',bullets:['Bra övernattningsläge','Nära Loen och Olden','Möjlighet till cykel och korta utflykter'],map:'Stryn Norway',lat:61.9045,lon:6.7226,img:'loen_wide.jpg'},
+ geiranger:{title:'Geiranger',text:'Fjordresans stora wow-stopp. Här ska ni prioritera båt/RIB och utsiktsplatser.',bullets:['Fjordkryssning eller RIB','Flydalsjuvet','Middag med fjordutsikt'],map:'Geiranger Norway',lat:62.1015,lon:7.2056,img:'geiranger_wide.jpg'},
+ trollstigen:{title:'Trollstigen',text:'Ikonisk vägdag med utsiktsplattformar, hårnålskurvor och dramatiska berg.',bullets:['Kolla vägläge innan avfärd','Åk tidigt för mindre trafik','Avsluta i Åndalsnes'],map:'Trollstigen Norway',lat:62.4590,lon:7.6630,img:'trollstigen_wide.jpg'},
+ andalsnes:{title:'Åndalsnes',text:'Naturlig sista natt före hemresan. Romsdalen, Rampestreken och en lugn kväll innan långkörningen.',bullets:['Rampestreken om benen är pigga','Bra bas före hemresa','Snygg final på resan'],map:'Åndalsnes Norway',lat:62.5675,lon:7.6871,img:'trollstigen_wide.jpg'}
 };
 const days=[
  {d:'Dag 1',title:'Idre → Røros',img:'roros_wide.jpg',meta:['≈250 km','3–4 h','mjuk start'],text:'Första etappen ska vara enkel. Checka in, ät bra middag och ta en kvällspromenad i Røros.'},
@@ -25,8 +27,23 @@ const weatherStops=[
  {id:'geiranger',name:'Geiranger',lat:62.1015,lon:7.2056,type:'fjord'},
  {id:'trollstigen',name:'Trollstigen / Åndalsnes',lat:62.4590,lon:7.6630,type:'väg'}
 ];
-function stopHtml(s){return `<p class="eyebrow">Valt stopp</p><h3>${s.title}</h3><p>${s.text}</p><ul>${s.bullets.map(b=>`<li>${b}</li>`).join('')}</ul><a class="btn small" target="_blank" rel="noreferrer" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.map)}">Öppna i Google Maps</a>`}
-document.querySelectorAll('[data-stop]').forEach(b=>b.addEventListener('click',()=>document.getElementById('stopcard').innerHTML=stopHtml(stops[b.dataset.stop])));
+const routeOrder=['idre','roros','jotunheimen','stryn','geiranger','trollstigen','andalsnes','idre'];
+let leafletMap=null, routeLayer=null, markerLayer=null, markerRefs={};
+const weatherStatusByStop={};
+function stopHtml(s){return `<div class="stophero"><img src="assets/${s.img}" alt="${s.title}"><div><p class="eyebrow">Valt stopp</p><h3>${s.title}</h3></div></div><p>${s.text}</p><ul>${s.bullets.map(b=>`<li>${b}</li>`).join('')}</ul><div class="stopactions"><a class="btn small" target="_blank" rel="noreferrer" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.map)}">Öppna i Google Maps</a><button class="btn small" type="button" onclick="focusStop('${Object.keys(stops).find(k=>stops[k]===s)}')">Zooma in</button></div>`}
+function selectStop(id){const s=stops[id]; if(!s) return; document.getElementById('stopcard').innerHTML=stopHtml(s); document.querySelectorAll('.custom-marker').forEach(m=>m.classList.remove('selected')); const el=markerRefs[id]?.getElement?.(); if(el) el.classList.add('selected');}
+function focusStop(id){const s=stops[id]; if(!s||!leafletMap) return; selectStop(id); leafletMap.flyTo([s.lat,s.lon],9,{duration:.75}); markerRefs[id]?.openPopup?.();}
+function initMap(){
+ if(!window.L||!document.getElementById('routeMap')) return;
+ leafletMap=L.map('routeMap',{scrollWheelZoom:false,zoomControl:true}).setView([62.0,8.9],6);
+ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap'}).addTo(leafletMap);
+ routeLayer=L.polyline(routeOrder.map(id=>[stops[id].lat,stops[id].lon]),{color:'#65d4ff',weight:5,opacity:.9,lineCap:'round'}).addTo(leafletMap);
+ markerLayer=L.layerGroup().addTo(leafletMap);
+ renderMarkers();
+ leafletMap.fitBounds(routeLayer.getBounds(),{padding:[28,28]});
+}
+function markerIcon(id){const status=weatherStatusByStop[id]||'neutral'; const label=id==='jotunheimen'?'Jotunheimen':stops[id].title; return L.divIcon({className:'',html:`<button class="custom-marker ${status}" aria-label="${label}"><span>${label}</span></button>`,iconSize:[120,34],iconAnchor:[60,17],popupAnchor:[0,-18]});}
+function renderMarkers(){ if(!markerLayer) return; markerLayer.clearLayers(); markerRefs={}; [...new Set(routeOrder)].forEach(id=>{const s=stops[id]; const m=L.marker([s.lat,s.lon],{icon:markerIcon(id)}).addTo(markerLayer).bindPopup(`<strong>${s.title}</strong><br>${s.text.substring(0,92)}...`); m.on('click',()=>selectStop(id)); markerRefs[id]=m;}); }
 document.getElementById('daycards').innerHTML=days.map(x=>`<article class="day"><img src="assets/${x.img}" alt="${x.title}"><div class="day__body"><p class="eyebrow">${x.d}</p><h3>${x.title}</h3><div class="day__meta">${x.meta.map(m=>`<span class="pill">${m}</span>`).join('')}</div><p>${x.text}</p></div></article>`).join('');
 function renderActs(filter='all'){document.getElementById('activitygrid').innerHTML=acts.filter(a=>filter==='all'||a[1].includes(filter)).map(a=>`<article class="activity"><p class="eyebrow">${a[1].split(' ')[0]}</p><h3>${a[0]}</h3><p>${a[2]}</p></article>`).join('')}
 renderActs();document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));c.classList.add('active');renderActs(c.dataset.filter)}));
@@ -63,6 +80,8 @@ async function loadWeather(){
      const score=weatherScore(stop,day); const a=advice(stop,score,day);
      return {...stop,day,score,status:a[0],headline:a[1],text:a[2]};
    }));
+   results.forEach(r=>{weatherStatusByStop[r.id]=r.status;});
+   renderMarkers();
    const bad=results.filter(r=>r.score<55), best=results.slice().sort((a,b)=>b.score-a.score)[0];
    summary.innerHTML=`<div><p class="eyebrow">Smart rekommendation</p><h3>${bad.length?`${bad.length} stopp kräver reservplan`:'Rutten ser bra ut just nu'}</h3><p>Bästa väderfönstret just nu: <strong>${best.name}</strong>. ${bad.length?'Prioritera flexibilitet för fjäll/vägdagar och kontrollera prognosen igen nära avfärd.':'Behåll planen, men följ fjällvädret dagligen.'}</p></div><div class="weatherbadge ${bad.length?'warn':'go'}">${Math.round(results.reduce((s,r)=>s+r.score,0)/results.length)}<span>/100</span></div>`;
    grid.innerHTML=results.map(r=>`<article class="weathercard ${r.status}"><div class="weathercard__top"><p class="eyebrow">${r.name}</p><span>${r.score}/100</span></div><h3>${r.headline}</h3><p>${WMO[r.day.weather_code]||'Växlande'} · ${Math.round(r.day.temperature_2m_min)}–${Math.round(r.day.temperature_2m_max)}°C · ${r.day.precipitation_sum} mm · vind max ${Math.round(r.day.wind_speed_10m_max)} m/s</p><small>${r.text}</small></article>`).join('');
@@ -72,4 +91,5 @@ async function loadWeather(){
  }
 }
 document.getElementById('refreshWeather')?.addEventListener('click',loadWeather);
+initMap();
 loadWeather();
